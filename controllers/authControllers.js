@@ -12,7 +12,7 @@ const generateToken = (userId) => {
 // @access  Public
 const registerUser = async (req, res) => {
     try {
-        const { name, email, password, profileImageUrl, adminInviteToken } = req.body;
+        const { name, email, password, profileImageUrl } = req.body;
 
         // check if user already exists
         const userExists = await User.findOne({ email });
@@ -20,23 +20,17 @@ const registerUser = async (req, res) => {
             return res.status(400).json({ message: "User already exists" });
         }
 
-        // Determine user role: admin or member
-        let role = "member";
-        if (adminInviteToken && adminInviteToken == process.env.ADMIN_INVITE_TOKEN) {
-            role = "admin";
-        }
-
         // Hash password
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // Create user
+        // Create user (always a member — admin accounts are created separately)
         const user = await User.create({
             name,
             email,
             password: hashedPassword,
             profileImageUrl,
-            role,
+            role: "member",
         });
 
         // Return user data with JWT
@@ -70,6 +64,11 @@ const loginUser = async (req, res) => {
         if (!isMatch) {
             return res.status(401).json({ message: "Invalid credentials" });
         };
+
+        // Block login if account has been deactivated by admin
+        if (user.isActive === false) {
+            return res.status(403).json({ message: "Your account has been deactivated. Please contact admin." });
+        }
 
         // Return user data with JWT
         res.status(200).json({

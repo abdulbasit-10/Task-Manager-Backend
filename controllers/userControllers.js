@@ -61,4 +61,31 @@ const deleteUser = async (req, res) => {
     }
 };
 
-module.exports = { getUsers, getUserById, deleteUser };
+// desc Activate/Deactivate user (admin only)
+// route PUT /api/users/:id/status
+// access Private
+const toggleUserStatus = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        if (user.role === "admin") {
+            return res.status(400).json({ message: "Admin account cannot be deactivated" });
+        }
+
+        user.isActive = !user.isActive;
+        await user.save();
+
+        res.status(200).json({
+            message: user.isActive ? "User activated" : "User deactivated",
+            isActive: user.isActive,
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Server Error", error: error.message });
+    }
+};
+
+module.exports = { getUsers, getUserById, deleteUser, toggleUserStatus };
+
