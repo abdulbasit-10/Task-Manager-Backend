@@ -16,7 +16,6 @@ const protect = async (req, res, next) => {
             res.status(401);
             throw new Error("Not authorized");
         }
-
     } catch (error) {
         res.status(401);
         throw new Error("Not authorized");
@@ -34,3 +33,4 @@ const adminOnly = (req, res, next) => {
 };
 
 module.exports = { protect, adminOnly };
+
