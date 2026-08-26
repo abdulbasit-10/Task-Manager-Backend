@@ -4,13 +4,18 @@ dns.setServers(['8.8.8.8', '8.8.4.4']);
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const http = require('http');
+const { Server } = require('socket.io');
+const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const connectDB = require('./config/db');
 const User = require('./models/User');
+const Message = require('./models/Message');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const taskRoutes = require('./routes/taskRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const chatRoutes = require('./routes/chatRoutes');
 
 const app = express();
 
@@ -42,13 +47,12 @@ const createDefaultAdmin = async () => {
             role: "admin",
         });
 
-        console.log("✅ Admin created:", ADMIN_EMAIL);
+        console.log("✅ Default admin created:", ADMIN_EMAIL);
     } catch (error) {
-        console.error("Error creating admin:", error.message);
+        console.error("Error creating default admin:", error.message);
     }
 };
 
-// Small delay to make sure MongoDB has connected first
 setTimeout(createDefaultAdmin, 2000);
 
 app.get('/', (req, res) => {
@@ -60,12 +64,60 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/chat', chatRoutes);
 
 // server upload folder 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// --- Socket.io setup (needs a raw http server instead of app.listen directly) ---
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: { origin: '*' }
+});
+
+// Authenticate every socket connection using the same JWT used for the REST API
+io.use((socket, next) => {
+    try {
+        const token = socket.handshake.auth?.token;
+        if (!token) return next(new Error('Not authorized'));
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        socket.userId = decoded.id;
+        next();
+    } catch (error) {
+        next(new Error('Not authorized'));
+    }
+});
+
+io.on('connection', (socket) => {
+    // Everyone joins the single "general" room for now (group chat)
+    socket.join('general');
+
+    socket.on('sendGroupMessage', async (text) => {
+        try {
+            if (!text || !text.trim()) return;
+
+            const message = await Message.create({
+                sender: socket.userId,
+                text: text.trim(),
+                room: 'general',
+            });
+
+            const populated = await message.populate('sender', 'name profileImageUrl');
+
+            io.to('general').emit('newGroupMessage', populated);
+        } catch (error) {
+            console.error('Error sending group message:', error.message);
+        }
+    });
+
+    socket.on('disconnect', () => {
+        // no-op for now
+    });
+});
+
 // Server
 const port = process.env.PORT || 5000;
-app.listen(port, () => {
+server.listen(port, () => {
     console.log(`Server running on port ${port}`);
 });

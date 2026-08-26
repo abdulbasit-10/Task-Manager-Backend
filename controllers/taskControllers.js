@@ -189,6 +189,12 @@ const updateTaskStatus = async (req, res) => {
             })
 
             task.progress = 100;
+        } else if (task.status === "Pending") {
+            task.todoChecklist.forEach((item) => {
+                item.completed = false;
+            })
+
+            task.progress = 0;
         }
 
         await task.save();
