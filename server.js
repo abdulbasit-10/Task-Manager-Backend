@@ -111,6 +111,32 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Direct messages
+    socket.on('joinDM', (otherUserId) => {
+        const roomId = [socket.userId.toString(), otherUserId.toString()].sort().join('_');
+        socket.join(roomId);
+    });
+
+    socket.on('sendDirectMessage', async ({ to, text }) => {
+        try {
+            if (!text || !text.trim() || !to) return;
+
+            const roomId = [socket.userId.toString(), to.toString()].sort().join('_');
+
+            const message = await Message.create({
+                sender: socket.userId,
+                text: text.trim(),
+                room: roomId,
+            });
+
+            const populated = await message.populate('sender', 'name profileImageUrl');
+
+            io.to(roomId).emit('newDirectMessage', populated);
+        } catch (error) {
+            console.error('Error sending direct message:', error.message);
+        }
+    });
+
     socket.on('disconnect', () => {
         // no-op for now
     });
